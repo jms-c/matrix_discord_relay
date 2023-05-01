@@ -35,6 +35,7 @@ use crate::{
 
 pub static BOT_APPSERVICE: Mutex<Option<AppService>> = Mutex::new(None);
 pub static BOT_REGISTRATION: Mutex<Option<AppServiceRegistration>> = Mutex::new(None);
+pub static BOT_CLIENT: Mutex<Option<Client>> = Mutex::new(None);
 
 async fn handle_room_message(event: OriginalSyncRoomMessageEvent, room: Room) {
     println!("GOT MESSAGE");
@@ -55,7 +56,8 @@ async fn handle_room_message(event: OriginalSyncRoomMessageEvent, room: Room) {
         // send our message to the room we found the "!party" command in
         // the last parameter is an optional transaction id which we don't
         // care about.
-        /*let res = room.send(content, None).await.unwrap();
+        /*
+        let res = room.send(content, None).await.unwrap();
         // https://github.com/matrix-org/matrix-rust-sdk/blob/ae79fd0af5721e78268a9716cb111d9498b51788/bindings/matrix-sdk-ffi/src/room.rs edit code show in bindings
         let replacement = Replacement::new(
             res.event_id,
@@ -159,7 +161,11 @@ pub async fn start_bot() -> Result<()> {
 
         *(BOT_APPSERVICE
             .lock()
-            .expect("Bot registration is poisoned")) = appservice_local.clone();
+            .expect("Bot appservice is poisoned")) = appservice_local.clone();
+
+        *(BOT_CLIENT
+            .lock()
+            .expect("Bot client is poisoned")) = Some(user.clone());
     }
 
     println!("Syncing");

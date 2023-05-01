@@ -1,9 +1,20 @@
+use futures::future::Join;
 use matrix_sdk::{Client, room::Joined};
-use ruma::{RoomId, events::{room::message::{RoomMessageEventContent, Relation}, relation::InReplyTo}, EventId, OwnedEventId};
+use ruma::{RoomId, events::{room::message::{RoomMessageEventContent, Relation, MessageType}, relation::{InReplyTo, Replacement}}, EventId, OwnedEventId};
 
 use crate::{chat_service::{Message, FullMessage, self}, CONFIG};
 
-use super::bot::{BOT_REGISTRATION, BOT_APPSERVICE};
+use super::bot::{BOT_REGISTRATION, BOT_APPSERVICE, BOT_CLIENT};
+
+pub async fn get_room_as_user(user: Client, room_id: &RoomId) -> Joined
+{
+    let client_local =  (*(BOT_CLIENT.lock().expect("Bot client is poisoned"))).clone();
+    let appservice_room = client_local.unwrap().get_joined_room(room_id);
+    appservice_room.unwrap().invite_user_by_id(user.user_id().unwrap()).await;
+
+    user.join_room_by_id(room_id).await;
+    return user.get_joined_room(room_id).unwrap();
+}
 
 pub async fn get_bot_user(user_id: String) -> Client
 {
@@ -60,10 +71,8 @@ pub async fn relay_message(message: FullMessage) -> Message
 
 
     let id: Box<RoomId> = RoomId::parse_box(out.room_id.clone().as_ref()).unwrap();
-    user.join_room_by_id(id.as_ref()).await.unwrap();
 
-
-    let room = user.get_joined_room(id.as_ref()).unwrap();
+    let room = get_room_as_user(user, id.as_ref()).await;
     let content = RoomMessageEventContent::text_html(message.content.clone(), markdown::to_html(&message.content.clone()));
 
     let mut reply_id: String = "".to_owned();
@@ -100,21 +109,46 @@ pub async fn relay_message(message: FullMessage) -> Message
     return out;
 }
 
-pub async fn delete_message(message: FullMessage)
+pub async fn edit_message(message: FullMessage)
 {
-    let user = get_bot_user(message.user.id).await;
-
+    let html_body = markdown::to_html(&message.content.clone());
+    let body = message.content.clone();
+    let content = RoomMessageEventContent::text_html(body.clone(), html_body.clone());
     let relayed_messages = chat_service::message_relays(message.message);
+    let user = get_bot_user(message.user.id).await;
+    
+    for msg in relayed_messages.iter() {
+        if msg.service == "matrix" {
+            let id: Box<RoomId> = RoomId::parse_box(msg.room_id.clone().as_ref()).unwrap();
+            let room = get_room_as_user(user.clone(), id.as_ref()).await;
+            let event_id = EventId::parse(msg.id.clone()).unwrap();
+
+            let replacement = Replacement::new(
+                event_id,
+                MessageType::text_html(body.clone(), html_body.clone())
+            );
+            let mut edited_content = content.clone();
+            edited_content.relates_to = Some(Relation::Replacement(replacement));
+            room.timeline().await.send(edited_content.into(), None).await;
+        }
+    }
+}
+
+pub async fn delete_message(message: Message)
+{
+
+    let relayed_messages = chat_service::message_relays(message);
     if relayed_messages.len() > 0 {
         for msg in relayed_messages {
             if msg.service == "matrix" {
                 let id: Box<RoomId> = RoomId::parse_box(msg.room_id.clone().as_ref()).unwrap();
-                user.join_room_by_id(id.as_ref()).await.unwrap();
+                
+                let client_local =  (*(BOT_CLIENT.lock().expect("Bot client is poisoned"))).clone();
+                let appservice_room = client_local.unwrap().get_joined_room(id.as_ref());
             
-                let room = user.get_joined_room(id.as_ref()).unwrap();
                 let event_id = EventId::parse_box(msg.id).unwrap();
                 let event_id_ref = &(*event_id);
-                room.redact(event_id_ref, None, None).await;
+                appservice_room.unwrap().redact(event_id_ref, None, None).await;
             }
         }
     }

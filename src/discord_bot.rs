@@ -1,6 +1,6 @@
 use std::env;
 
-use serenity::model::prelude::{ChannelId, MessageId};
+use serenity::model::prelude::{ChannelId, MessageId, MessageUpdateEvent};
 use serenity::{async_trait, model::prelude::GuildId};
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
@@ -27,21 +27,32 @@ fn message_to_relayed_message(msg: Message, guild_id: String) -> chat_service::M
     return relay_msg;
 }
 
+async fn author_to_user(author: serenity::model::prelude::User) -> User {
+    return User {
+        source: "discord".to_string(), // Source, e.g matrix, discord
+        id: author.id.to_string(), // Actual id
+        ping: format!("<@{}>", author.id.to_string()), // Used to mention user
+        tag: format!("{}", author.tag()), // Used to tag (kinda)
+        display: author.name.to_owned() // Display Name
+    };
+}
+
 async fn message_to_full_message(msg: Message) -> chat_service::FullMessage {
     let ctx = (*(CONTEXT.lock().unwrap())).clone().unwrap();
-    let mut display_name = msg.clone().author.name;
     let nick = msg.clone().author_nick(ctx.http.clone()).await.clone();
-    if nick.is_some() {
-        display_name = nick.unwrap().to_owned();
-    }
 
-    let user = User {
+
+    /*let user = User {
         source: "discord".to_string(), // Source, e.g matrix, discord
         id: msg.author.id.to_string(), // Actual id
         ping: format!("<@{}>", msg.clone().author.id.to_string()), // Used to mention user
         tag: format!("{}", msg.clone().author.tag()), // Used to tag (kinda)
         display: display_name // Display Name
-    };
+    };*/
+    let mut user = author_to_user(msg.clone().author).await;
+    if nick.is_some() {
+        user.display = nick.unwrap().to_owned();
+    }
 
     let relay_msg = message_to_relayed_message(msg.clone(), msg.guild_id.unwrap().to_string());
 
@@ -113,7 +124,32 @@ impl EventHandler for Handler {
             id: deleted_message_id.to_string(),
         };
         
-        println!("DEBUG {}", _ctx.cache.message(channel_id, deleted_message_id).unwrap().author.name.to_owned());
+        matrix::relay::delete_message(msg.clone()).await;
+        chat_service::delete_message(msg.clone());
+    }
+
+    async fn message_update(
+        &self,
+        _ctx: Context,
+        old_if_available: Option<Message>,
+        new: Option<Message>,
+        event: MessageUpdateEvent,
+    ) {
+        let relay_msg = chat_service::Message {
+            service: "discord".to_owned(),
+            id: event.id.to_string(),
+            room_id: event.channel_id.to_string(),
+            server_id: event.guild_id.unwrap().to_string(),
+        };
+
+
+        let relay_msg = chat_service::FullMessage {
+            content: event.content.unwrap().clone(),
+            user: author_to_user(event.author.unwrap()).await,
+            message: relay_msg,
+            reply: None
+        };
+        matrix::relay::edit_message(relay_msg).await;
     }
 
     // Set a handler to be called on the `ready` event. This is called when a
