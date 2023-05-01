@@ -16,7 +16,7 @@ ruma = { version = "0.8.2", features = [] }
 anyhow = "1.0.71"
 
 tokio = { version = "1.28.0", features = ["macros", "rt-multi-thread"] }
-serenity = { version = "0.11", default-features = false, features = ["client", "gateway", "rustls_backend", "model"]}
+serenity = { version = "0.11", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"]}
 tracing-subscriber = "0.3.17"
 tracing = "0.1.37"
 futures = "0.3.28"

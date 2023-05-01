@@ -99,6 +99,23 @@ impl EventHandler for Handler {
         }
     }
 
+    async fn message_delete(
+        &self,
+        _ctx: Context,
+        channel_id: ChannelId,
+        deleted_message_id: MessageId,
+        guild_id: Option<GuildId>,
+    ) {
+        let msg = chat_service::Message {
+            service: "discord".to_owned(),
+            server_id: guild_id.unwrap().to_string(),
+            room_id: channel_id.to_string(),
+            id: deleted_message_id.to_string(),
+        };
+        
+        println!("DEBUG {}", _ctx.cache.message(channel_id, deleted_message_id).unwrap().author.name.to_owned());
+    }
+
     // Set a handler to be called on the `ready` event. This is called when a
     // shard is booted, and a READY payload is sent by Discord. This payload
     // contains data like the current user's guild Ids, current user data,

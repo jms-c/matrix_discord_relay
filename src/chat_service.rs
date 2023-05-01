@@ -92,3 +92,17 @@ pub fn message_relays(source: Message) -> Vec<Message>
 
     return out;
 }
+
+pub fn delete_message(msg: Message)
+{
+    let mut id = msg.id.clone();
+    let origin = message_origin(msg.clone());
+    if origin.is_some() {
+        id = origin.unwrap().id;
+    }
+    let id = id.as_str();
+    let database = Connection::open("./relay.db").expect("Error loading db!");
+    database.execute("DELETE FROM messages WHERE id_org=:id", 
+    (":id", id),
+    ).expect("Should have delete message!");
+}

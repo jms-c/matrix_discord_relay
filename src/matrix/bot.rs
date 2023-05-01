@@ -76,7 +76,7 @@ pub async fn start_bot() -> Result<()> {
     // Currently this causes a stack overflow on windows, stack size has been increased during compilation as a temporary fix.
     // TODO: Find better fix
 
-    env::set_var("RUST_LOG", "matrix_sdk=debug,matrix_sdk_appservice=debug");
+    //env::set_var("RUST_LOG", "matrix_sdk=debug,matrix_sdk_appservice=debug");
     tracing_subscriber::fmt::init();
 
     println!("Starting!");

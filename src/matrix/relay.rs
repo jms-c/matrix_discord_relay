@@ -5,6 +5,35 @@ use crate::{chat_service::{Message, FullMessage, self}, CONFIG};
 
 use super::bot::{BOT_REGISTRATION, BOT_APPSERVICE};
 
+pub async fn get_bot_user(user_id: String) -> Client
+{
+    let registration_local = (*(BOT_REGISTRATION.lock().expect("Bot registration is poisoned"))).clone();
+    let appservice_local = (*(BOT_APPSERVICE.lock().expect("Bot appservice is poisoned"))).clone();
+
+    let relay_bot_name = format!(
+        "{}{}",
+        registration_local
+            .as_ref()
+            .unwrap()
+            .sender_localpart
+            .clone(),
+        user_id
+    );
+
+    let res = appservice_local
+        .as_ref()
+        .unwrap()
+        .register_user(&relay_bot_name, None)
+        .await;    
+
+    let user = appservice_local
+        .as_ref()
+        .unwrap()
+        .user(Some(&relay_bot_name))
+        .await.unwrap();
+    return user;
+}
+
 pub async fn relay_message(message: FullMessage) -> Message
 {
     let mut out: Message = message.message.clone();
@@ -21,31 +50,7 @@ pub async fn relay_message(message: FullMessage) -> Message
         }
     }
 
-    let registration_local = (*(BOT_REGISTRATION.lock().expect("Bot registration is poisoned"))).clone();
-    let appservice_local = (*(BOT_APPSERVICE.lock().expect("Bot appservice is poisoned"))).clone();
-
-    let relay_bot_name = format!(
-        "{}{}",
-        registration_local
-            .as_ref()
-            .unwrap()
-            .sender_localpart
-            .clone(),
-        message.user.id
-    );
-
-    let res = appservice_local
-        .as_ref()
-        .unwrap()
-        .register_user(&relay_bot_name, None)
-        .await;    
-
-    let user = appservice_local
-        .as_ref()
-        .unwrap()
-        .user(Some(&relay_bot_name))
-        .await.unwrap();
-
+    let user = get_bot_user(message.user.id).await;
 
     let changed_name = user
         .account()
@@ -93,6 +98,26 @@ pub async fn relay_message(message: FullMessage) -> Message
     }
     //let member = room.get_member(&user.user_id().unwrap()).await.unwrap().unwrap().
     return out;
+}
+
+pub async fn delete_message(message: FullMessage)
+{
+    let user = get_bot_user(message.user.id).await;
+
+    let relayed_messages = chat_service::message_relays(message.message);
+    if relayed_messages.len() > 0 {
+        for msg in relayed_messages {
+            if msg.service == "matrix" {
+                let id: Box<RoomId> = RoomId::parse_box(msg.room_id.clone().as_ref()).unwrap();
+                user.join_room_by_id(id.as_ref()).await.unwrap();
+            
+                let room = user.get_joined_room(id.as_ref()).unwrap();
+                let event_id = EventId::parse_box(msg.id).unwrap();
+                let event_id_ref = &(*event_id);
+                room.redact(event_id_ref, None, None).await;
+            }
+        }
+    }
 }
 
 async fn reply_to_message(room: Joined, event_id: OwnedEventId, content: RoomMessageEventContent) -> OwnedEventId
