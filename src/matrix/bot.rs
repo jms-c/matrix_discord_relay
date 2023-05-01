@@ -26,11 +26,11 @@ use matrix_sdk_appservice::{
     AppService, AppServiceBuilder, AppServiceRegistration, Result,
 };
 use tracing::{info, trace};
-use tracing_subscriber::fmt::format;
+use tracing_subscriber::fmt::format::{self, Full};
 
 use crate::{
     chat_service::{self, Message, User, FullMessage},
-    CONFIG,
+    CONFIG, discord,
 };
 
 pub static BOT_APPSERVICE: Mutex<Option<AppService>> = Mutex::new(None);
@@ -49,10 +49,44 @@ async fn handle_room_message(event: OriginalSyncRoomMessageEvent, room: Room) {
     }
 
     if let Room::Joined(room) = room {
-        let content = RoomMessageEventContent::text_plain("🎉🎊🥳 let's PARTY!! 🥳🎊🎉");
+
+        let mut continue_relay = false;
+        for m in CONFIG.room.iter() {
+            if m.matrix == room.room_id().to_string() {
+                continue_relay = true;
+            }
+        }
+        if !continue_relay {
+            return;
+        }
+
+        let msg = Message {
+            service: "matrix".to_owned(),
+            server_id: "".to_owned(),
+            room_id: room.room_id().to_string(),
+            id: event.event_id.to_string()
+        };
+
+        let user = User {
+            source: "matrix".to_owned(),
+            id: event.sender.to_string(),
+            ping: format!("<@{}>", event.sender.to_string()),
+            tag: event.sender.to_string(),
+            display: event.sender.to_string(),
+            avatar: None
+        };
+
+        let relay_msg = FullMessage {
+            message: msg,
+            user: user,
+            content: event.content.body().to_string(),
+            reply: None
+        };
+        //let content = RoomMessageEventContent::text_plain("🎉🎊🥳 let's PARTY!! 🥳🎊🎉");
 
         println!("sending");
-
+        let discord_msg = discord::relay::relay_message(relay_msg.clone()).await;
+        chat_service::create_message(relay_msg.message, discord_msg);
         // send our message to the room we found the "!party" command in
         // the last parameter is an optional transaction id which we don't
         // care about.

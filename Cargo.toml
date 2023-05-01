@@ -10,7 +10,7 @@ matrix-sdk = {git = "https://github.com/matrix-org/matrix-rust-sdk", features = 
 matrix-sdk-appservice = {git = "https://github.com/matrix-org/matrix-rust-sdk"}
 serde = "1.0.160"
 toml = "0.7.3"
-webhook = "2.1.1"
+reqwest = { version = "0.11", features = ["json", "blocking"] }
 ruma = { version = "0.8.2", features = [] }
 
 anyhow = "1.0.71"

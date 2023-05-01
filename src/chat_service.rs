@@ -1,12 +1,16 @@
 use rusqlite::Connection;
 
+use crate::discord::relay;
+
 #[derive(Clone)]
 pub struct User {
     pub source: String, // Source, e.g matrix, discord
     pub id: String, // Actual id
     pub ping: String, // Used to mention user
     pub tag: String, // Used to tag (kinda)
-    pub display: String // Display Name
+    pub display: String, // Display Name
+
+    pub avatar: Option<String>,
 }
 
 #[derive(Clone)]
@@ -37,6 +41,7 @@ pub fn create_message(source: Message, relayed: Message)
 
 pub fn message_origin(relayed: Message) -> Option<Message>
 {
+    println!("Origin of: {} {} {} {}", relayed.service, relayed.server_id, relayed.room_id, relayed.id);
     let database = Connection::open("./relay.db").expect("Error loading db!");
     let mut stmt = database.prepare("SELECT service_org, server_id_org, room_id_org, id_org FROM messages WHERE service_out=:s AND server_id_out=:sid AND room_id_out=:rid AND id_out=:id").unwrap();
     let iter = stmt.query_map(&[

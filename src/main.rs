@@ -10,7 +10,7 @@ use anyhow::Ok;
 use futures::{future};
 use serde::Deserialize;
 
-pub mod discord_bot;
+pub mod discord;
 pub mod matrix;
 pub mod chat_service;
 
@@ -28,6 +28,7 @@ pub struct Outer {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Entry {
     pub discord: String,
+    pub discord_guild: String,
     pub matrix: String,
     pub webhook: String,
 }
@@ -45,7 +46,7 @@ pub async fn main() -> anyhow::Result<()> {
     
     // Both wait on event loop of some kind, so we run them at the same time
         //futures::join!(matrix_bot::start_bot(), discord_bot::start_bot()).await;
-    future::join(matrix::bot::start_bot(), discord_bot::start_bot()).await.0.ok();
+    future::join(matrix::bot::start_bot(), discord::bot::start_bot()).await.0.ok();
 
     Ok(())
 }

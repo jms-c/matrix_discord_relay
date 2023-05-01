@@ -1621,6 +1621,7 @@ dependencies = [
  "markdown",
  "matrix-sdk",
  "matrix-sdk-appservice",
+ "reqwest",
  "ruma",
  "rusqlite",
  "serde",
@@ -1629,7 +1630,6 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
- "webhook",
 ]
 
 [[package]]
@@ -1795,15 +1795,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
-name = "openssl-src"
-version = "111.25.3+1.1.1t"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "924757a6a226bf60da5f7dd0311a34d2b52283dd82ddeb103208ddc66362f80c"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "openssl-sys"
 version = "0.9.80"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1812,7 +1803,6 @@ dependencies = [
  "autocfg",
  "cc",
  "libc",
- "openssl-src",
  "pkg-config",
  "vcpkg",
 ]
@@ -3383,18 +3373,6 @@ checksum = "e33b99f4b23ba3eec1a53ac264e35a755f00e966e0065077d6027c0f575b0b97"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "webhook"
-version = "2.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09d801ea0225da29d32c85b21d0cb12ed628783f5fa1fbe226e586a3ef6ca96f"
-dependencies = [
- "hyper",
- "hyper-tls",
- "serde",
- "serde_json",
 ]
 
 [[package]]

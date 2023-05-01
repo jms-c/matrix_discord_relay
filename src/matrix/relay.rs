@@ -1,12 +1,14 @@
+use std::{f32::consts::E, thread::panicking};
+
 use futures::future::Join;
 use matrix_sdk::{Client, room::Joined};
-use ruma::{RoomId, events::{room::message::{RoomMessageEventContent, Relation, MessageType}, relation::{InReplyTo, Replacement}}, EventId, OwnedEventId};
+use ruma::{RoomId, events::{room::message::{RoomMessageEventContent, Relation, MessageType}, relation::{InReplyTo, Replacement}}, EventId, OwnedEventId, MxcUri};
 
 use crate::{chat_service::{Message, FullMessage, self}, CONFIG};
 
 use super::bot::{BOT_REGISTRATION, BOT_APPSERVICE, BOT_CLIENT};
 
-pub async fn get_room_as_user(user: Client, room_id: &RoomId) -> Joined
+async fn get_room_as_user(user: Client, room_id: &RoomId) -> Joined
 {
     let client_local =  (*(BOT_CLIENT.lock().expect("Bot client is poisoned"))).clone();
     let appservice_room = client_local.unwrap().get_joined_room(room_id);
@@ -16,7 +18,7 @@ pub async fn get_room_as_user(user: Client, room_id: &RoomId) -> Joined
     return user.get_joined_room(room_id).unwrap();
 }
 
-pub async fn get_bot_user(user_id: String) -> Client
+async fn get_bot_user(user_id: String) -> Client
 {
     let registration_local = (*(BOT_REGISTRATION.lock().expect("Bot registration is poisoned"))).clone();
     let appservice_local = (*(BOT_APPSERVICE.lock().expect("Bot appservice is poisoned"))).clone();
@@ -69,6 +71,10 @@ pub async fn relay_message(message: FullMessage) -> Message
         .await
         .is_ok();
 
+    if message.user.avatar.is_some() {
+        //user.account().set_avatar_url(uri);
+    }
+
 
     let id: Box<RoomId> = RoomId::parse_box(out.room_id.clone().as_ref()).unwrap();
 
@@ -77,7 +83,7 @@ pub async fn relay_message(message: FullMessage) -> Message
 
     let mut reply_id: String = "".to_owned();
     if message.reply.is_some() {
-        let reply_msg = (*message.reply.unwrap());
+        let reply_msg = *message.reply.unwrap();
 
         let relayed_messages = chat_service::message_relays(reply_msg.clone());
         
@@ -92,6 +98,10 @@ pub async fn relay_message(message: FullMessage) -> Message
             let origin_message = chat_service::message_origin(reply_msg.clone());
             if origin_message.is_some() {
                 reply_id = origin_message.unwrap().id;
+            }
+            else
+            {
+                panic!("Cursed reply!");
             }
         }
 

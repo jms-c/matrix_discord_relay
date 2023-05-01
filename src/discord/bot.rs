@@ -33,7 +33,8 @@ async fn author_to_user(author: serenity::model::prelude::User) -> User {
         id: author.id.to_string(), // Actual id
         ping: format!("<@{}>", author.id.to_string()), // Used to mention user
         tag: format!("{}", author.tag()), // Used to tag (kinda)
-        display: author.name.to_owned() // Display Name
+        display: author.name.to_owned(), // Display Name
+        avatar: author.avatar
     };
 }
 
