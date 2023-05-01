@@ -1625,6 +1625,7 @@ dependencies = [
  "ruma",
  "rusqlite",
  "serde",
+ "serde_json",
  "serenity",
  "tokio",
  "toml",
