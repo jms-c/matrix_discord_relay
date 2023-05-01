@@ -34,6 +34,7 @@ async fn message_to_full_message(msg: Message) -> chat_service::FullMessage {
     if nick.is_some() {
         display_name = nick.unwrap().to_owned();
     }
+
     let user = User {
         source: "discord".to_string(), // Source, e.g matrix, discord
         id: msg.author.id.to_string(), // Actual id
@@ -46,6 +47,7 @@ async fn message_to_full_message(msg: Message) -> chat_service::FullMessage {
 
     let mut reply: Option<Box<chat_service::Message>> = None;
     if msg.referenced_message.is_some() {
+        //TODO: This may be recursive...
         let replyed_msg = *(msg.referenced_message.unwrap());
         reply = Some(Box::new(message_to_relayed_message(replyed_msg, msg.guild_id.unwrap().to_string())));
     }
@@ -87,14 +89,14 @@ impl EventHandler for Handler {
 
         for m in CONFIG.room.iter() {
             if m.discord == msg.channel_id.to_string() {
-                matrix::bot::relay_message(message_to_full_message(msg).await).await;
+                let relay_msg = message_to_full_message(msg).await;
+                let relayed = matrix::relay::relay_message(relay_msg.clone()).await;
                 
-                //chat_service::create_message(relay_msg, relayed);
+                chat_service::create_message(relay_msg.message, relayed);
 
                 break;
             }
         }
-        //message_handler::relay_message()
     }
 
     // Set a handler to be called on the `ready` event. This is called when a

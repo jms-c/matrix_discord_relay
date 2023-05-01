@@ -1,16 +1,15 @@
 use std::{cell::RefCell, env, string, sync::Mutex};
 
 use futures::future;
-use matrix_sdk::ruma::OwnedEventId;
 use ruma::{
     api::client::appservice,
     api::{appservice::Registration, client::error::ErrorKind},
     events::room::message::{RoomMessageEvent, TextMessageEventContent},
     events::{
         room::{message::{OriginalSyncRoomMessageEvent, RoomMessageEventContent, MessageType, Relation}, member::RoomMemberEventContent},
-        AnyMessageLikeEventContent, OriginalSyncMessageLikeEvent, relation::Replacement, StateEventContent,
+        AnyMessageLikeEventContent, OriginalSyncMessageLikeEvent, relation::{Replacement, InReplyTo}, StateEventContent,
     },
-    room_id, OwnedRoomId, RoomId, RoomOrAliasId,
+    room_id, OwnedRoomId, RoomId, RoomOrAliasId, EventId,
 };
 
 use matrix_sdk_appservice::{
@@ -72,66 +71,6 @@ async fn handle_room_message(event: OriginalSyncRoomMessageEvent, room: Room) {
     }
 }
 
-pub async fn relay_message(message: FullMessage) -> Message
-{
-    let mut out: Message = message.message.clone();
-    for mroom in CONFIG.room.iter() {
-        if mroom.discord == message.message.room_id
-        {
-            out = Message {
-                service: "matrix".to_owned(),
-                server_id: "".to_owned(),
-                room_id: mroom.matrix.clone(),
-                id: message.message.id.clone()
-            };
-            break;
-        }
-    }
-
-    let registration_local = (*(BOT_REGISTRATION.lock().expect("Bot registration is poisoned"))).clone();
-    let appservice_local = (*(BOT_APPSERVICE.lock().expect("Bot appservice is poisoned"))).clone();
-
-    let relay_bot_name = format!(
-        "{}{}",
-        registration_local
-            .as_ref()
-            .unwrap()
-            .sender_localpart
-            .clone(),
-        message.user.id
-    );
-
-    let res = appservice_local
-        .as_ref()
-        .unwrap()
-        .register_user(&relay_bot_name, None)
-        .await;    
-
-    let user = appservice_local
-        .as_ref()
-        .unwrap()
-        .user(Some(&relay_bot_name))
-        .await.unwrap();
-
-
-    let changed_name = user
-        .account()
-        .set_display_name(Some(format!("{} ({})", &message.user.display.clone(), &message.user.tag.clone()).as_str()))
-        .await
-        .is_ok();
-
-
-    let id: Box<RoomId> = RoomId::parse_box(out.room_id.clone().as_ref()).unwrap();
-    user.join_room_by_id(id.as_ref()).await.unwrap();
-
-
-    let room = user.get_joined_room(id.as_ref()).unwrap();
-    let content = RoomMessageEventContent::text_plain(message.content.clone());
-
-    room.send(content, None).await;
-    //let member = room.get_member(&user.user_id().unwrap()).await.unwrap().unwrap().
-    return out;
-}
 
 pub async fn start_bot() -> Result<()> {
     // Currently this causes a stack overflow on windows, stack size has been increased during compilation as a temporary fix.
