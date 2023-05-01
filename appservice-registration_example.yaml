@@ -1,0 +1,13 @@
+id: dc-appservice
+url: https://localhost:8080
+as_token: as_token
+hs_token: hs_token
+sender_localpart: _appservice_
+namespaces:
+  aliases: []
+  rooms: []
+  users:
+  - exclusive: true
+    regex: '@_appservice_.*'
+rate_limited: false
+protocols: []

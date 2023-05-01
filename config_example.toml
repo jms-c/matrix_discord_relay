@@ -1,0 +1,6 @@
+discord_token = "Discord Bot Token"
+
+[[room]]
+discord = "Room ID"
+matrix = "Room ID"
+webhook = "Discord Webhook"
