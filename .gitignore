@@ -1,0 +1,6 @@
+/target
+/.vscode
+config.toml
+relay.db
+test.bat
+appservice-registration.yaml
