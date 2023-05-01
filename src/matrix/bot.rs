@@ -1,6 +1,7 @@
 use std::{cell::RefCell, env, string, sync::Mutex};
 
 use futures::future;
+use matrix_sdk::room::Joined;
 use ruma::{
     api::client::appservice,
     api::{appservice::Registration, client::error::ErrorKind},
@@ -67,6 +68,62 @@ fn strip_reply(msg: String) -> String
     return actual_message;
 }
 
+async fn format_for_reply(message: FullMessage, event: OriginalSyncRoomMessageEvent, room: Joined) -> FullMessage
+{
+    let mut relay_msg = message.clone();
+
+    if event.content.relates_to.is_some() {
+        let mut reply_header = "".to_owned();
+
+        match event.content.clone().relates_to.unwrap() {
+            Relation::Reply {in_reply_to} => {
+                let reply_id = in_reply_to.event_id;
+                let reply_data = room.event(&reply_id).await.unwrap().event.json().to_string();
+                let v: serde_json::Value = serde_json::from_str(&reply_data).unwrap();
+
+                let mut reply_body = v["content"]["body"].as_str().unwrap().to_owned();
+                reply_body = strip_reply(reply_body);
+
+                let reply_author = v["sender"].as_str().unwrap().to_owned();
+                let author_ping = find_ping(reply_author);
+
+                let mut header = reply_body.lines().collect::<Vec<&str>>()[0].to_owned();
+                if header.len() > 64 {
+                    header = format!("{}...", &header[..64]);
+                }
+
+                let reply_msg = Message { service: "matrix".to_owned(), server_id: "".to_owned(), room_id: room.room_id().to_string(), id: reply_id.to_string() };
+
+                let relayed_messages = chat_service::message_relays(reply_msg.clone());
+                let mut discord_msg_url = "".to_owned();
+                for msg in relayed_messages {
+                    if msg.service == "discord" {
+                        discord_msg_url = format!("https://discord.com/channels/{}/{}/{}", msg.server_id, msg.room_id, msg.id);
+                    }
+                }
+                let origin_message = chat_service::message_origin(reply_msg.clone());
+                if origin_message.is_some() {
+                    if origin_message.clone().unwrap().service == "discord" {
+                        discord_msg_url = format!("https://discord.com/channels/{}/{}/{}", origin_message.clone().unwrap().server_id, origin_message.clone().unwrap().room_id, origin_message.clone().unwrap().id);
+                    }
+                }
+
+                if discord_msg_url != "" {
+                    header = format!("[{}]({})", header, discord_msg_url).to_owned();
+                }
+                //https://discord.com/channels/server/channel/msg
+                reply_header = format!("> {} {}", author_ping, header);
+            }
+            _ => {
+    
+            }
+        }
+
+        relay_msg.content = format!("{}\n{}", reply_header, strip_reply(event.content.body().to_owned()));
+    }
+    return relay_msg;
+}
+
 async fn handle_room_message(event: OriginalSyncRoomMessageEvent, room: Room) {
     println!("GOT MESSAGE");
     println!("{}", event.content.body());
@@ -116,57 +173,7 @@ async fn handle_room_message(event: OriginalSyncRoomMessageEvent, room: Room) {
 
         println!("sending");
 
-        // Very temporary reply system (I need to find replied message from event.content.relates_to)
-        if event.content.relates_to.is_some() {
-            let mut reply_header = "".to_owned();
-
-            match event.content.clone().relates_to.unwrap() {
-                Relation::Reply {in_reply_to} => {
-                    let reply_id = in_reply_to.event_id;
-                    let reply_data = room.event(&reply_id).await.unwrap().event.json().to_string();
-                    let v: serde_json::Value = serde_json::from_str(&reply_data).unwrap();
-
-                    let mut reply_body = v["content"]["body"].as_str().unwrap().to_owned();
-                    reply_body = strip_reply(reply_body);
-
-                    let reply_author = v["sender"].as_str().unwrap().to_owned();
-                    let author_ping = find_ping(reply_author);
-
-                    let mut header = reply_body.lines().collect::<Vec<&str>>()[0].to_owned();
-                    if header.len() > 64 {
-                        header = format!("{}...", &header[..64]);
-                    }
-
-                    let reply_msg = Message { service: "matrix".to_owned(), server_id: "".to_owned(), room_id: room.room_id().to_string(), id: reply_id.to_string() };
-
-                    let relayed_messages = chat_service::message_relays(reply_msg.clone());
-                    let mut discord_msg_url = "".to_owned();
-                    for msg in relayed_messages {
-                        if msg.service == "discord" {
-                            discord_msg_url = format!("https://discord.com/channels/{}/{}/{}", msg.server_id, msg.room_id, msg.id);
-                        }
-                    }
-                    let origin_message = chat_service::message_origin(reply_msg.clone());
-                    if origin_message.is_some() {
-                        if origin_message.clone().unwrap().service == "discord" {
-                            discord_msg_url = format!("https://discord.com/channels/{}/{}/{}", origin_message.clone().unwrap().server_id, origin_message.clone().unwrap().room_id, origin_message.clone().unwrap().id);
-                        }
-                    }
-
-                    if discord_msg_url != "" {
-                        header = format!("[{}]({})", header, discord_msg_url).to_owned();
-                    }
-                    //https://discord.com/channels/server/channel/msg
-                    reply_header = format!("> {} {}", author_ping, header);
-                }
-                _ => {
-                    return;
-                }
-            }
-    
-
-            relay_msg.content = format!("{}\n{}", reply_header, strip_reply(event.content.body().to_owned()));
-        }
+        relay_msg = format_for_reply(relay_msg.clone(), event, room).await;
         let discord_msg = discord::relay::relay_message(relay_msg.clone()).await;
         chat_service::create_message(relay_msg.message, discord_msg);
         // send our message to the room we found the "!party" command in
