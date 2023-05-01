@@ -1,4 +1,7 @@
 discord_token = "Discord Bot Token"
+host = "0.0.0.0:8080"
+homeserver_url = "https://matrix.example.com:443"
+server_name = "example.com"
 
 [[room]]
 discord = "Room ID"
