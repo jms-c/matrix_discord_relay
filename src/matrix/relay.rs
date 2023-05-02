@@ -99,10 +99,6 @@ pub async fn relay_message(message: FullMessage) -> Message
             if origin_message.is_some() {
                 reply_id = origin_message.unwrap().id;
             }
-            else
-            {
-                panic!("Cursed reply!");
-            }
         }
 
     }

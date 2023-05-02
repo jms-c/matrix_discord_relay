@@ -7,10 +7,17 @@ use ruma::{
     api::{appservice::Registration, client::error::ErrorKind},
     events::room::message::{RoomMessageEvent, TextMessageEventContent},
     events::{
-        room::{message::{OriginalSyncRoomMessageEvent, RoomMessageEventContent, MessageType, Relation}, member::RoomMemberEventContent},
-        AnyMessageLikeEventContent, OriginalSyncMessageLikeEvent, relation::{Replacement, InReplyTo}, StateEventContent, AnyTimelineEvent,
+        relation::{InReplyTo, Replacement},
+        room::{
+            member::RoomMemberEventContent,
+            message::{
+                MessageType, OriginalSyncRoomMessageEvent, Relation, RoomMessageEventContent,
+            },
+        },
+        AnyMessageLikeEventContent, AnyTimelineEvent, OriginalSyncMessageLikeEvent,
+        StateEventContent,
     },
-    room_id, OwnedRoomId, RoomId, RoomOrAliasId, EventId,
+    room_id, EventId, OwnedEventId, OwnedRoomId, RoomId, RoomOrAliasId,
 };
 
 use matrix_sdk_appservice::{
@@ -22,7 +29,8 @@ use matrix_sdk_appservice::{
             events::room::member::{MembershipState, OriginalSyncRoomMemberEvent},
             UserId,
         },
-        Client, sync::SyncResponse,
+        sync::SyncResponse,
+        Client,
     },
     AppService, AppServiceBuilder, AppServiceRegistration, Result,
 };
@@ -30,8 +38,8 @@ use tracing::{info, trace};
 use tracing_subscriber::fmt::format::{self, Full};
 
 use crate::{
-    chat_service::{self, Message, User, FullMessage},
-    CONFIG, discord,
+    chat_service::{self, FullMessage, Message, User},
+    discord, CONFIG,
 };
 
 pub static BOT_APPSERVICE: Mutex<Option<AppService>> = Mutex::new(None);
@@ -39,7 +47,10 @@ pub static BOT_REGISTRATION: Mutex<Option<AppServiceRegistration>> = Mutex::new(
 pub static BOT_CLIENT: Mutex<Option<Client>> = Mutex::new(None);
 
 fn find_ping(ping: String) -> String {
-    let user = ping.trim_start_matches("<").trim_start_matches("@").trim_end_matches(">");
+    let user = ping
+        .trim_start_matches("<")
+        .trim_start_matches("@")
+        .trim_end_matches(">");
     let parts = user.split(":").collect::<Vec<&str>>();
     let localpart = parts[0].to_owned();
 
@@ -48,15 +59,15 @@ fn find_ping(ping: String) -> String {
 
     if localpart.starts_with(bot_localpart.as_str()) {
         return format!("<@{}>", &localpart[bot_localpart.len()..]);
-    }
-    else
-    {
-        return ping.trim_start_matches("<").trim_end_matches(">").to_owned();
+    } else {
+        return ping
+            .trim_start_matches("<")
+            .trim_end_matches(">")
+            .to_owned();
     }
 }
 
-fn strip_reply(msg: String) -> String
-{
+fn strip_reply(msg: String) -> String {
     let mut actual_message = "".to_owned();
 
     for line in msg.lines() {
@@ -68,60 +79,94 @@ fn strip_reply(msg: String) -> String
     return actual_message;
 }
 
-async fn format_for_reply(message: FullMessage, event: OriginalSyncRoomMessageEvent, room: Joined) -> FullMessage
-{
+async fn format_for_reply_event_id(
+    message: FullMessage,
+    reply_id: OwnedEventId,
+    content: String,
+    room: Joined,
+) -> FullMessage {
     let mut relay_msg = message.clone();
 
-    if event.content.relates_to.is_some() {
-        let mut reply_header = "".to_owned();
+    let mut reply_header = "".to_owned();
+;
+    let reply_data = room
+        .event(&reply_id)
+        .await
+        .unwrap()
+        .event
+        .json()
+        .to_string();
+    let v: serde_json::Value = serde_json::from_str(&reply_data).unwrap();
 
-        match event.content.clone().relates_to.unwrap() {
-            Relation::Reply {in_reply_to} => {
-                let reply_id = in_reply_to.event_id;
-                let reply_data = room.event(&reply_id).await.unwrap().event.json().to_string();
-                let v: serde_json::Value = serde_json::from_str(&reply_data).unwrap();
+    let mut reply_body = v["content"]["body"].as_str().unwrap().to_owned();
+    reply_body = strip_reply(reply_body);
 
-                let mut reply_body = v["content"]["body"].as_str().unwrap().to_owned();
-                reply_body = strip_reply(reply_body);
+    let reply_author = v["sender"].as_str().unwrap().to_owned();
+    let author_ping = find_ping(reply_author);
 
-                let reply_author = v["sender"].as_str().unwrap().to_owned();
-                let author_ping = find_ping(reply_author);
-
-                let mut header = reply_body.lines().collect::<Vec<&str>>()[0].to_owned();
-                if header.len() > 64 {
-                    header = format!("{}...", &header[..64]);
-                }
-
-                let reply_msg = Message { service: "matrix".to_owned(), server_id: "".to_owned(), room_id: room.room_id().to_string(), id: reply_id.to_string() };
-
-                let relayed_messages = chat_service::message_relays(reply_msg.clone());
-                let mut discord_msg_url = "".to_owned();
-                for msg in relayed_messages {
-                    if msg.service == "discord" {
-                        discord_msg_url = format!("https://discord.com/channels/{}/{}/{}", msg.server_id, msg.room_id, msg.id);
-                    }
-                }
-                let origin_message = chat_service::message_origin(reply_msg.clone());
-                if origin_message.is_some() {
-                    if origin_message.clone().unwrap().service == "discord" {
-                        discord_msg_url = format!("https://discord.com/channels/{}/{}/{}", origin_message.clone().unwrap().server_id, origin_message.clone().unwrap().room_id, origin_message.clone().unwrap().id);
-                    }
-                }
-
-                if discord_msg_url != "" {
-                    header = format!("[{}]({})", header, discord_msg_url).to_owned();
-                }
-                //https://discord.com/channels/server/channel/msg
-                reply_header = format!("> {} {}", author_ping, header);
-            }
-            _ => {
-    
-            }
-        }
-
-        relay_msg.content = format!("{}\n{}", reply_header, strip_reply(event.content.body().to_owned()));
+    let mut header = reply_body.lines().collect::<Vec<&str>>()[0].to_owned();
+    if header.len() > 64 {
+        header = format!("{}...", &header[..64]);
     }
+
+    let reply_msg = Message {
+        service: "matrix".to_owned(),
+        server_id: "".to_owned(),
+        room_id: room.room_id().to_string(),
+        id: reply_id.to_string(),
+    };
+
+    let relayed_messages = chat_service::message_relays(reply_msg.clone());
+    let mut discord_msg_url = "".to_owned();
+    for msg in relayed_messages {
+        if msg.service == "discord" {
+            discord_msg_url = format!(
+                "https://discord.com/channels/{}/{}/{}",
+                msg.server_id, msg.room_id, msg.id
+            );
+        }
+    }
+    let origin_message = chat_service::message_origin(reply_msg.clone());
+    if origin_message.is_some() {
+        if origin_message.clone().unwrap().service == "discord" {
+            discord_msg_url = format!(
+                "https://discord.com/channels/{}/{}/{}",
+                origin_message.clone().unwrap().server_id,
+                origin_message.clone().unwrap().room_id,
+                origin_message.clone().unwrap().id
+            );
+        }
+    }
+
+    if discord_msg_url != "" {
+        header = format!("[{}]({})", header, discord_msg_url).to_owned();
+    }
+    //https://discord.com/channels/server/channel/msg
+    reply_header = format!("> {} {}", author_ping, header);
+
+    relay_msg.content = format!(
+        "{}\n{}",
+        reply_header,
+        strip_reply(content)
+    );
     return relay_msg;
+}
+
+async fn format_for_reply(
+    message: FullMessage,
+    event: OriginalSyncRoomMessageEvent,
+    room: Joined,
+) -> FullMessage {
+    if event.content.relates_to.is_some() {
+        match event.content.clone().relates_to.unwrap() {
+            Relation::Reply { in_reply_to } => {
+                let reply_id = in_reply_to.event_id;
+                return format_for_reply_event_id(message, reply_id, event.content.body().to_owned(), room).await;
+            }
+            _ => {}
+        }
+    }
+    return message;
 }
 
 async fn handle_room_message(event: OriginalSyncRoomMessageEvent, room: Room) {
@@ -136,7 +181,6 @@ async fn handle_room_message(event: OriginalSyncRoomMessageEvent, room: Room) {
     }
 
     if let Room::Joined(room) = room {
-
         let mut continue_relay = false;
         for m in CONFIG.room.iter() {
             if m.matrix == room.room_id().to_string() {
@@ -151,7 +195,7 @@ async fn handle_room_message(event: OriginalSyncRoomMessageEvent, room: Room) {
             service: "matrix".to_owned(),
             server_id: "".to_owned(),
             room_id: room.room_id().to_string(),
-            id: event.event_id.to_string()
+            id: event.event_id.to_string(),
         };
 
         let user = User {
@@ -160,16 +204,47 @@ async fn handle_room_message(event: OriginalSyncRoomMessageEvent, room: Room) {
             ping: format!("<@{}>", event.sender.to_string()),
             tag: event.sender.to_string(),
             display: event.sender.to_string(),
-            avatar: None
+            avatar: None,
         };
 
         let mut relay_msg = FullMessage {
             message: msg,
             user: user,
             content: event.content.body().to_string(),
-            reply: None
+            reply: None,
         };
         //let content = RoomMessageEventContent::text_plain("🎉🎊🥳 let's PARTY!! 🥳🎊🎉");
+
+        if event.content.relates_to.is_some() {
+            match event.content.clone().relates_to.unwrap() {
+                Relation::Replacement(r) => {
+                    let event_id = r.event_id;
+                    let edit_data = room
+                        .event(&event_id)
+                        .await
+                        .unwrap()
+                        .event
+                        .json()
+                        .to_string();
+                    let v: serde_json::Value = serde_json::from_str(&edit_data).unwrap();
+
+                    relay_msg.message.id = event_id.to_string();
+                    if v["content"]["m.relates_to"].get("m.in_reply_to").is_some() {
+                        println!("Is reply!");
+                        let reply_event = v["content"]["m.relates_to"]["m.in_reply_to"]["event_id"].as_str().unwrap();
+                        let reply_event = EventId::parse(reply_event).unwrap();
+                        relay_msg = format_for_reply_event_id(relay_msg.clone(), reply_event, relay_msg.clone().content, room).await;
+                    }
+                    else
+                    {
+                        println!("Isn't reply!");
+                    }
+                    discord::relay::edit_message(relay_msg).await;
+                    return;
+                }
+                _ => {}
+            }
+        }
 
         println!("sending");
 
@@ -281,13 +356,9 @@ pub async fn start_bot() -> Result<()> {
             .lock()
             .expect("Bot registration is poisoned")) = registration_local.clone();
 
-        *(BOT_APPSERVICE
-            .lock()
-            .expect("Bot appservice is poisoned")) = appservice_local.clone();
+        *(BOT_APPSERVICE.lock().expect("Bot appservice is poisoned")) = appservice_local.clone();
 
-        *(BOT_CLIENT
-            .lock()
-            .expect("Bot client is poisoned")) = Some(user.clone());
+        *(BOT_CLIENT.lock().expect("Bot client is poisoned")) = Some(user.clone());
     }
 
     println!("Syncing");
