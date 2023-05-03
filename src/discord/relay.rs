@@ -3,11 +3,22 @@ use crate::{chat_service, CONFIG};
 use reqwest;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::fmt::format;
 
 #[derive(Debug, Deserialize, Clone)]
 struct WebhookResponse {
     id: String,
     channel_id: String,
+}
+
+fn sanitize(message: String) -> String
+{
+    let mut out = message.clone();
+    let zero_width_space = "​";
+    let fake_ping = format!("@{}", zero_width_space);
+    out = out.replace("@everyone", format!("{}everyone", fake_ping).as_str());
+    out = out.replace("@here", format!("{}here", fake_ping).as_str());
+    return out;
 }
 
 async fn send_message_webhook(
@@ -16,7 +27,7 @@ async fn send_message_webhook(
     username: Option<String>,
 ) -> WebhookResponse {
     let mut params = HashMap::new();
-    params.insert("content", message);
+    params.insert("content", sanitize(message));
     if username.is_some() {
         params.insert("username", username.unwrap());
     }
@@ -41,7 +52,7 @@ async fn edit_message_webhook(
     message: String,
 ) -> WebhookResponse {
     let mut params = HashMap::new();
-    params.insert("content", message);
+    params.insert("content", sanitize(message));
 
     let client = reqwest::Client::new();
     let res = client

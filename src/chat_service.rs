@@ -107,7 +107,7 @@ pub fn delete_message(msg: Message)
     }
     let id = id.as_str();
     let database = Connection::open("./relay.db").expect("Error loading db!");
-    database.execute("DELETE FROM messages WHERE id_org=:id", 
+    database.execute("DELETE FROM messages WHERE id_org=:id OR id_new=:id", 
     (":id", id),
     ).expect("Should have delete message!");
 }

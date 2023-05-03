@@ -143,7 +143,7 @@ pub async fn edit_message(message: FullMessage)
 pub async fn delete_message(message: Message)
 {
 
-    let relayed_messages = chat_service::message_relays(message);
+    let relayed_messages = chat_service::message_relays(message.clone());
     if relayed_messages.len() > 0 {
         for msg in relayed_messages {
             if msg.service == "matrix" {
@@ -157,6 +157,18 @@ pub async fn delete_message(message: Message)
                 appservice_room.unwrap().redact(event_id_ref, None, None).await;
             }
         }
+    }
+
+    let origin_message = chat_service::message_origin(message.clone());
+    if origin_message.is_some() && origin_message.clone().unwrap().clone().service == "matrix" {
+        let id: Box<RoomId> = RoomId::parse_box(origin_message.clone().unwrap().room_id.clone().as_ref()).unwrap();
+                
+        let client_local =  (*(BOT_CLIENT.lock().expect("Bot client is poisoned"))).clone();
+        let appservice_room = client_local.unwrap().get_joined_room(id.as_ref());
+    
+        let event_id = EventId::parse_box(origin_message.clone().unwrap().id).unwrap();
+        let event_id_ref = &(*event_id);
+        appservice_room.unwrap().redact(event_id_ref, None, None).await;
     }
 }
 
