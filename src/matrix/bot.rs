@@ -181,13 +181,8 @@ async fn handle_room_message(event: OriginalSyncRoomMessageEvent, room: Room) {
     }
 
     if let Room::Joined(room) = room {
-        let mut continue_relay = false;
-        for m in CONFIG.room.iter() {
-            if m.matrix == room.room_id().to_string() {
-                continue_relay = true;
-            }
-        }
-        if !continue_relay {
+        let m = CONFIG.room.iter().find(|m| m.matrix == room.room_id().to_string());
+        if m.is_none() {
             return;
         }
 

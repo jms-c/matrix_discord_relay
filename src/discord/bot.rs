@@ -6,7 +6,7 @@ use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 
-use crate::{matrix};
+use crate::{matrix, Entry};
 use crate::{CONFIG, chat_service::{self, FullMessage, User}};
 
 struct Handler;
@@ -99,15 +99,12 @@ impl EventHandler for Handler {
             return;
         }
 
-        for m in CONFIG.room.iter() {
-            if m.discord == msg.channel_id.to_string() {
-                let relay_msg = message_to_full_message(msg).await;
-                let relayed = matrix::relay::relay_message(relay_msg.clone()).await;
+        let room = CONFIG.room.iter().find(|room| room.discord == msg.channel_id.to_string());
+        if room.is_some() {
+            let relay_msg = message_to_full_message(msg).await;
+            let relayed = matrix::relay::relay_message(relay_msg.clone()).await;
                 
-                chat_service::create_message(relay_msg.message, relayed);
-
-                break;
-            }
+            chat_service::create_message(relay_msg.message, relayed);
         }
     }
 
