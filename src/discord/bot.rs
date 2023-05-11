@@ -74,7 +74,7 @@ async fn message_to_full_message(msg: Message) -> chat_service::FullMessage {
     return full_msg;
 }
 
-pub async fn relayed_message_to_message(msg: chat_service::Message) -> Message {
+pub async fn relayed_message_to_message(msg: chat_service::Message) -> Option<Message> {
     // This may or may not work...
     let ctx = (*(CONTEXT.lock().unwrap())).clone().unwrap();
     let guild_id = GuildId(msg.server_id.parse::<u64>().unwrap());
@@ -83,7 +83,11 @@ pub async fn relayed_message_to_message(msg: chat_service::Message) -> Message {
     let channel = channels.as_ref().unwrap().get(&channel_id).unwrap();
 
     let message_id = MessageId(msg.id.parse::<u64>().unwrap());
-    return channel.message(ctx.http.clone(), message_id).await.unwrap();
+    let out_msg = channel.message(ctx.http.clone(), message_id).await;
+    if out_msg.is_ok() {
+        return Some(out_msg.unwrap());
+    }
+    return None;
 }
 
 #[async_trait]

@@ -5,6 +5,8 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::fmt::format;
 
+use super::bot::{CONTEXT, relayed_message_to_message};
+
 #[derive(Debug, Deserialize, Clone)]
 struct WebhookResponse {
     id: String,
@@ -20,6 +22,31 @@ fn sanitize(message: String) -> String
     out = out.replace("@here", format!("{}here", fake_ping).as_str());
     return out;
 }
+
+pub async fn delete_message(message: Message)
+{
+    let relayed_messages = chat_service::message_relays(message.clone());
+    let http = (*(CONTEXT.lock().unwrap())).as_ref().unwrap().http.clone();
+    if relayed_messages.len() > 0 {
+        for msg in relayed_messages {
+            if msg.service == "discord" {
+                let discord_msg = relayed_message_to_message(msg).await;
+                if discord_msg.is_some() {
+                    discord_msg.unwrap().delete(http.clone()).await;
+                }
+            }
+        }
+    }
+
+    let origin_message = chat_service::message_origin(message.clone());
+    if origin_message.is_some() && origin_message.clone().unwrap().clone().service == "discord" {
+        let discord_msg = relayed_message_to_message(origin_message.unwrap()).await;
+        if discord_msg.is_some() {
+            discord_msg.unwrap().delete(http.clone()).await;
+        }
+    }
+}
+
 
 async fn send_message_webhook(
     webhook: String,

@@ -12,7 +12,7 @@ use ruma::{
             member::RoomMemberEventContent,
             message::{
                 MessageType, OriginalSyncRoomMessageEvent, Relation, RoomMessageEventContent,
-            },
+            }, redaction::OriginalSyncRoomRedactionEvent,
         },
         AnyMessageLikeEventContent, AnyTimelineEvent, OriginalSyncMessageLikeEvent,
         StateEventContent,
@@ -266,6 +266,21 @@ async fn handle_room_message(event: OriginalSyncRoomMessageEvent, room: Room) {
     }
 }
 
+async fn handle_message_redact(event: OriginalSyncRoomRedactionEvent, room: Room)
+{
+    if let Room::Joined(room) = room {
+        let msg = chat_service::Message {
+            service: "matrix".to_owned(),
+            server_id: "".to_string(),
+            room_id: room.room_id().to_string(),
+            id: event.redacts.to_string(),
+        };
+        
+        discord::relay::delete_message(msg.clone()).await;
+        chat_service::delete_message(msg.clone());
+    }
+}
+
 pub async fn start_bot() -> Result<()> {
     // Currently this causes a stack overflow on windows, stack size has been increased during compilation as a temporary fix.
     // TODO: Find better fix
@@ -365,6 +380,7 @@ pub async fn start_bot() -> Result<()> {
 
     user.add_event_handler_context(appservice_local.clone());
     user.add_event_handler(handle_room_message);
+    user.add_event_handler(handle_message_redact);
 
     print!("Splitting");
 
