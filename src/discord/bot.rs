@@ -103,9 +103,15 @@ impl EventHandler for Handler {
             return;
         }
 
+        let mut attach_text = "".to_owned();
+        for attach in &msg.attachments {
+            attach_text.push_str(format!(" {}", attach.proxy_url.clone()).as_str());
+        }
+
         let room = CONFIG.room.iter().find(|room| room.discord == msg.channel_id.to_string());
         if room.is_some() {
-            let relay_msg = message_to_full_message(msg).await;
+            let mut relay_msg = message_to_full_message(msg).await;
+            relay_msg.content = format!("{}{}", relay_msg.content.clone(), attach_text.clone());
             let relayed = matrix::relay::relay_message(relay_msg.clone()).await;
                 
             chat_service::create_message(relay_msg.message, relayed);
